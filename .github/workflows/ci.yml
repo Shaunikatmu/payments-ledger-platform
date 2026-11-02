@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run unit tests (payment-service + fraud-service)
+        run: ./gradlew test
+        # Covers both modules -- the root build.gradle's subprojects block
+        # wires 'test' for each. No external services needed: these are
+        # pure Mockito tests, same as running them locally without
+        # `docker compose up -d`.
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: |
+            payment-service/build/reports/tests/test
+            fraud-service/build/reports/tests/test
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    # Only payment-service has *IT tests (LedgerConcurrencyIT) -- see
+    # docs/DECISIONS.md on the Testcontainers-vs-dedicated-test-db choice
+    # this mirrors. fraud-service's event-driven paths are covered by its
+    # unit tests against the handler beans directly (PaymentCreatedHandlerTest
+    # etc), not a live-Kafka integration test, so no Kafka service container
+    # is spun up here -- deliberately out of scope for this project's size,
+    # same reasoning as the production-code outbox-vs-direct-publish
+    # asymmetry between the two services.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: payments
+          POSTGRES_PASSWORD: payments
+          POSTGRES_DB: payments_test_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U payments -d payments_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run payment-service integration tests
+        run: ./gradlew :payment-service:integrationTest
+        # application-test.yml's defaults (localhost:5433, payments/payments,
+        # payments_test_db) already match this service container exactly --
+        # no DB_HOST/DB_PORT overrides needed.
+
+      - name: Upload integration test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: payment-service/build/reports/tests/integrationTest

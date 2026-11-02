@@ -1,0 +1,57 @@
+server:
+  port: ${SERVER_PORT:8090}
+
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:payments_db}
+    username: ${DB_USER:payments}
+    password: ${DB_PASSWORD:payments}
+  jpa:
+    hibernate:
+      # Flyway owns the schema -- Hibernate only validates against it, never
+      # auto-generates DDL. See docs/DECISIONS.md if this changes.
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9194}
+    # The producer side (used by the outbox relay) is configured explicitly
+    # in KafkaProducerConfig instead of via these properties -- see its
+    # Javadoc for why.
+    consumer:
+      group-id: payment-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.paymentsledger.paymentservice.kafka.dto
+        spring.json.value.default.type: com.paymentsledger.paymentservice.kafka.dto.FraudDecisionEvent
+        spring.json.use.type.headers: false
+
+# Outbox relay poll interval. 500ms is intentionally short for a local demo
+# so a transfer resolves quickly when you're watching it; a production
+# system would tune this against Kafka publish latency and DB load.
+outbox:
+  relay:
+    poll-interval-ms: 500
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  pattern:
+    # %X{correlationId} pulls the request's correlation ID out of MDC --
+    # set by CorrelationIdFilter for inbound HTTP requests, and restored
+    # from the event payload by the Kafka consumers for everything that
+    # happens later, on a different thread, settling that same transfer.
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-no-correlation-id}] %logger{36} - %msg%n"

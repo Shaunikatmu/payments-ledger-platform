@@ -1,0 +1,16 @@
+# Used by integration tests (@ActiveProfiles("test")). Points at the
+# payments_test_db database inside the same payment-db container used for
+# local dev -- see payment-service/init-db and docs/DECISIONS.md for why
+# this exists instead of Testcontainers.
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/payments_test_db
+    username: payments
+    password: payments
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    clean-disabled: false

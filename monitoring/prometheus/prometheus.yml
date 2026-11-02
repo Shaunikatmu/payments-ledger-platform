@@ -1,0 +1,17 @@
+# payment-service and fraud-service run on the HOST via Eclipse, not inside
+# this docker-compose network (see docker-compose.yml's top comment) -- so
+# Prometheus, which DOES run in a container, reaches them through Docker
+# Desktop's host.docker.internal DNS name rather than a container name.
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: 'payment-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8090']
+
+  - job_name: 'fraud-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8091']

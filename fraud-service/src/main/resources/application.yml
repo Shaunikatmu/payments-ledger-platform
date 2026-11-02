@@ -1,0 +1,70 @@
+server:
+  port: ${SERVER_PORT:8091}
+
+spring:
+  application:
+    name: fraud-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5434}/${DB_NAME:fraud_db}
+    username: ${DB_USER:fraud}
+    password: ${DB_PASSWORD:fraud}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9194}
+    # Producer side configured explicitly in KafkaProducerConfig (JSON,
+    # unlike payment-service's raw-string outbox relay producer).
+    consumer:
+      group-id: fraud-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.paymentsledger.fraudservice.kafka.dto
+        spring.json.value.default.type: com.paymentsledger.fraudservice.kafka.dto.PaymentCreatedEvent
+        spring.json.use.type.headers: false
+
+# Rule weights and decision thresholds -- all tunable without touching
+# code. See docs/DECISIONS.md for why these particular starting values.
+fraud:
+  rules:
+    velocity:
+      window-seconds: 60
+      max-transfers-per-window: 5
+      max-score: 40
+    amount-anomaly:
+      min-history: 3
+      multiplier: 3.0
+      max-score: 40
+    new-recipient:
+      large-amount-cents: 50000
+      score: 30
+  thresholds:
+    review: 30
+    block: 70
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  pattern:
+    # %X{correlationId} pulls the request's correlation ID out of MDC --
+    # set by CorrelationIdFilter for inbound HTTP requests, and restored
+    # from the event payload by the Kafka consumers for everything that
+    # happens later, on a different thread, settling that same transfer.
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{correlationId:-no-correlation-id}] %logger{36} - %msg%n"
