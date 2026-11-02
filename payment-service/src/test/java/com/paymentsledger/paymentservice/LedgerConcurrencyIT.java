@@ -65,7 +65,7 @@ class LedgerConcurrencyIT {
     void resetDatabaseAndOpenTwoFundedAccounts() {
         jdbcTemplate.execute("TRUNCATE TABLE journal_entries, idempotency_keys, outbox_events, processed_fraud_decisions, transfers RESTART IDENTITY CASCADE");
         jdbcTemplate.execute("DELETE FROM accounts WHERE account_type = 'CUSTOMER'");
-        jdbcTemplate.update("UPDATE accounts SET balance_cents = ? WHERE id = ?", Long.MAX_VALUE, Account.EXTERNAL_FUNDING_ID.toString());
+        jdbcTemplate.update("UPDATE accounts SET balance_cents = ? WHERE id = ?", Long.MAX_VALUE, Account.EXTERNAL_FUNDING_ID);
 
         accountA = openAccount("Account A", 100_000L);
         accountB = openAccount("Account B", 100_000L);
@@ -89,7 +89,7 @@ class LedgerConcurrencyIT {
 
         Long transferCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transfers WHERE from_account_id = ? AND to_account_id = ?",
-                Long.class, accountA.toString(), accountB.toString());
+                Long.class, accountA, accountB);
         assertThat(transferCount).isEqualTo(1L);
 
         // Held exactly once, not 50 times. The recipient hasn't been paid
@@ -173,14 +173,14 @@ class LedgerConcurrencyIT {
     }
 
     private long balanceOf(UUID accountId) {
-        Long balance = jdbcTemplate.queryForObject("SELECT balance_cents FROM accounts WHERE id = ?", Long.class, accountId.toString());
+        Long balance = jdbcTemplate.queryForObject("SELECT balance_cents FROM accounts WHERE id = ?", Long.class, accountId);
         return balance;
     }
 
     private long sumPendingTransferAmounts() {
         Long sum = jdbcTemplate.queryForObject(
                 "SELECT COALESCE(SUM(amount_cents), 0) FROM transfers WHERE status = 'PENDING' AND from_account_id IN (?, ?)",
-                Long.class, accountA.toString(), accountB.toString());
+                Long.class, accountA, accountB);
         return sum == null ? 0 : sum;
     }
 }
