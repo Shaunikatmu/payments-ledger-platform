@@ -195,9 +195,6 @@ skips the outbox pattern payment-service relies on, why CI doesn't spin up a
 Kafka broker, and seventeen others -- is written up with the problem it solved
 and the alternatives considered in **[docs/DECISIONS.md](docs/DECISIONS.md)**.
 
-## Measured benchmark results
-
-None yet -- this section only ever reports numbers that were actually measured.
 
 ## License
 
