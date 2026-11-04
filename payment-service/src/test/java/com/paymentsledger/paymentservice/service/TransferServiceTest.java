@@ -112,7 +112,7 @@ class TransferServiceTest {
         CreateTransferRequest request = new CreateTransferRequest(from.getId(), to.getId(), 300L);
 
         stubLookup(from, to);
-        when(transferRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transferRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         Transfer result = transferService.executeTransfer(request);
 
