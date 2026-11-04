@@ -7,6 +7,12 @@ spring:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/payments_test_db
     username: payments
     password: payments
+    hikari:
+      # Default pool size (10) isn't enough for LedgerConcurrencyIT's
+      # 50-way concurrent load -- each idempotency poll attempt opens its
+      # own REQUIRES_NEW connection, so 50 threads can easily want more
+      # than 10 connections at once, especially on a slower CI runner.
+      maximum-pool-size: 30
   jpa:
     hibernate:
       ddl-auto: validate

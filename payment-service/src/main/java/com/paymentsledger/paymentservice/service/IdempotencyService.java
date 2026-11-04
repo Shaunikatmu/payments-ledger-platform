@@ -32,7 +32,12 @@ import java.util.function.Supplier;
 @Service
 public class IdempotencyService {
 
-    private static final int MAX_POLL_ATTEMPTS = 60;
+    // Widened from 60x50ms (3s) -- under LedgerConcurrencyIT's 50-way
+    // concurrent load on a slower CI runner, losers can need more than 3s
+    // to see the winner's commit, especially once the connection pool is
+    // under pressure too. 100x50ms (5s) gives real headroom without making
+    // a genuinely stuck request hang too long.
+    private static final int MAX_POLL_ATTEMPTS = 100;
     private static final long POLL_INTERVAL_MS = 50;
 
     private final IdempotencyStore store;
