@@ -20,3 +20,17 @@ spring:
     enabled: true
     locations: classpath:db/migration
     clean-disabled: false
+
+# Diagnostic: the production default poll budget is 100x50ms (5s). Widened
+# here to 300x50ms (15s) -- still well inside LedgerConcurrencyIT's own
+# 30s-per-thread ceiling -- so the next CI run tells us whether the
+# sameIdempotencyKeySentConcurrentlyHoldsFundsExactlyOnce() failure is
+# really a timing issue under 50-way concurrency, or something else (the
+# IdempotencyTimeoutException handler now logs at WARN either way, so a
+# real timeout will show up explicitly in the console instead of just an
+# unexplained non-201 status).
+app:
+  idempotency:
+    poll:
+      max-attempts: 300
+      interval-ms: 50

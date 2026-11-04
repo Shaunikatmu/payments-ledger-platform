@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.paymentsledger.paymentservice.domain.IdempotencyRecord;
 import com.paymentsledger.paymentservice.exception.IdempotencyKeyReusedException;
 import com.paymentsledger.paymentservice.exception.IdempotencyTimeoutException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
@@ -32,20 +33,26 @@ import java.util.function.Supplier;
 @Service
 public class IdempotencyService {
 
-    // Widened from 60x50ms (3s) -- under LedgerConcurrencyIT's 50-way
-    // concurrent load on a slower CI runner, losers can need more than 3s
-    // to see the winner's commit, especially once the connection pool is
-    // under pressure too. 100x50ms (5s) gives real headroom without making
-    // a genuinely stuck request hang too long.
-    private static final int MAX_POLL_ATTEMPTS = 100;
-    private static final long POLL_INTERVAL_MS = 50;
+    // Configurable rather than hardcoded so the test profile can give
+    // itself more headroom under LedgerConcurrencyIT's 50-way concurrent
+    // load on a slower CI runner, without changing the production default
+    // (a genuinely stuck caller shouldn't hang too long in prod).
+    // Defaults: 100x50ms = 5s.
+    private final int maxPollAttempts;
+    private final long pollIntervalMs;
 
     private final IdempotencyStore store;
     private final ObjectMapper objectMapper;
 
-    public IdempotencyService(IdempotencyStore store, ObjectMapper objectMapper) {
+    public IdempotencyService(
+            IdempotencyStore store,
+            ObjectMapper objectMapper,
+            @Value("${app.idempotency.poll.max-attempts:100}") int maxPollAttempts,
+            @Value("${app.idempotency.poll.interval-ms:50}") long pollIntervalMs) {
         this.store = store;
         this.objectMapper = objectMapper;
+        this.maxPollAttempts = maxPollAttempts;
+        this.pollIntervalMs = pollIntervalMs;
     }
 
     public <T> ResponseEntity<T> execute(String idempotencyKey, String requestPath, Object requestBody,
@@ -71,7 +78,7 @@ public class IdempotencyService {
     }
 
     private <T> ResponseEntity<T> awaitResult(String idempotencyKey, String requestHash, Class<T> responseType) {
-        for (int attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+        for (int attempt = 0; attempt < maxPollAttempts; attempt++) {
             Optional<IdempotencyRecord> record = store.find(idempotencyKey);
             if (record.isPresent()) {
                 IdempotencyRecord found = record.get();
@@ -90,7 +97,7 @@ public class IdempotencyService {
 
     private void sleep() {
         try {
-            Thread.sleep(POLL_INTERVAL_MS);
+            Thread.sleep(pollIntervalMs);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while waiting for an in-flight idempotent request", ex);

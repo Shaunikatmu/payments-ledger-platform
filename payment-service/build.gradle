@@ -19,6 +19,12 @@ tasks.named('test') {
     filter {
         excludeTestsMatching '*IT'
     }
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+        showStackTraces = true
+        showCauses = true
+    }
 }
 
 tasks.register('integrationTest', Test) {
@@ -30,4 +36,10 @@ tasks.register('integrationTest', Test) {
     }
     systemProperty 'spring.profiles.active', 'test'
     shouldRunAfter test
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+        showStackTraces = true
+        showCauses = true
+    }
 }
