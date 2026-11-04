@@ -95,12 +95,23 @@ public class TransferService {
             return transferRepository.save(transfer);
         }
 
+        // The transfer row has to exist in the database before the journal
+        // entry below references it: transfer_id on journal_entries is a
+        // bare FK column (no JPA @ManyToOne association), so Hibernate has
+        // no metadata telling it Transfer must be inserted before
+        // JournalEntry. Without this explicit flush, Hibernate's own insert
+        // ordering/batching is free to issue the journal_entries INSERT
+        // first -- which under concurrent load it did, violating
+        // journal_entries_transfer_id_fkey because the transfer row didn't
+        // exist in the database yet (seen under LedgerConcurrencyIT's
+        // 50-way load).
+        transferRepository.saveAndFlush(transfer);
+
         // Hold the funds now: debit + journal entry committed immediately.
         fromAccount.debit(request.amountCents());
         accountRepository.save(fromAccount);
         journalEntryRepository.save(new JournalEntry(UUID.randomUUID(), transfer.getId(), fromAccount.getId(), Direction.DEBIT, request.amountCents(), now));
 
-        transferRepository.save(transfer);
         enqueuePaymentCreatedEvent(transfer, now);
         recordCreated("PENDING", "NONE");
 
