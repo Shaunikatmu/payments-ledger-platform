@@ -54,6 +54,17 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
+    // Catch-all so an exception type nobody mapped yet never fails silently
+    // as an unexplained 500 -- the class and full stack trace are logged
+    // here instead of disappearing into the container's own default error
+    // handling, which this app's logging setup wasn't surfacing at all
+    // (see LedgerConcurrencyIT's intermittent 500 under 50-way load).
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
+        log.error("Unhandled exception on {}: {}", request.getRequestURI(), ex.toString(), ex);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", request);
+    }
+
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, HttpServletRequest request) {
         ErrorResponse body = new ErrorResponse(Instant.now(), status.value(), status.getReasonPhrase(), message, request.getRequestURI());
         return ResponseEntity.status(status).body(body);

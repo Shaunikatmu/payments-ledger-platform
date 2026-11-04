@@ -2,6 +2,7 @@ package com.paymentsledger.paymentservice.service;
 
 import com.paymentsledger.paymentservice.domain.IdempotencyRecord;
 import com.paymentsledger.paymentservice.repository.IdempotencyKeyRepository;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -43,6 +44,15 @@ public class IdempotencyStore {
             repository.saveAndFlush(new IdempotencyRecord(key, requestPath, requestHash, Instant.now()));
             return true;
         } catch (DataIntegrityViolationException alreadyClaimed) {
+            return false;
+        } catch (ConcurrencyFailureException lostTheRace) {
+            // Under enough concurrent INSERTs of the exact same key (e.g.
+            // LedgerConcurrencyIT's 50-way same-key load), Postgres/Hibernate
+            // can report the collision as a lock/concurrency failure
+            // (CannotAcquireLockException and friends) instead of a clean
+            // DataIntegrityViolationException. It means the same thing here
+            // -- someone else has this key -- so treat it the same way
+            // rather than letting it escape uncaught as a 500.
             return false;
         }
     }
